@@ -3,44 +3,42 @@ const express = require('express');
 const router = express.Router();
 const db = require('../config/db');
 
-
 const generateUniqueId = () => {
   return String(Math.floor(100000 + Math.random() * 900000));
 };
-
-// CREATE a new product_group
+// CREATE a new tag
 router.post('/', (req, res) => {
-  const { title, parent,app, owner,userid, active, url } = req.body;
+  const { id, title, app, owner, userid } = req.body;
 
-  // Get the current timestamp for createdAt
-  const uniqueId = generateUniqueId();
 
-  const createdAt = new Date();
 
-  // Modify the SQL query to include id and createdAt
-  const sql = 'INSERT INTO product_groups (id, title, owner, userid, createdAt, url) VALUES (?, ?, ?, ?, ?, ?)';
+  const sql = 'INSERT INTO tags (id, title, app, owner, userid) VALUES (?, ?, ?, ?, ?)';
   
-  // Pass the generated id and current timestamp along with other values
-  db.query(sql, [ uniqueId, title, owner,userid, createdAt, url,], (err, result) => {
+  db.query(sql, [id, title, app, owner, userid], (err, result) => {
     if (err) {
       console.log(err)
       return res.status(500).send(err);
 
     }
-    res.status(201).json({ message: 'Product Group created', product_group: title });
+    res.status(201).json({ message: 'Tag created', tagId: id });
   });
 });
 
-// READ all product_groups
+// READ all tags
 router.get('/', (req, res) => {
   const { firmId,app } = req.query; // Extract 'firmId' from the query string
 
-  let sql = 'SELECT * FROM product_groups';
+  let sql = 'SELECT * FROM tags';
   let queryParams = [];
 
   if (firmId) {
     sql += ' WHERE owner = ?';
     queryParams.push(firmId);
+  }
+  if (app) {
+    // If firmId was already added, use "AND" instead of "WHERE"
+    sql += firmId ? ' AND app = ?' : ' WHERE app = ?';
+    queryParams.push(app);
   }
 
   db.query(sql, queryParams, (err, results) => {
@@ -51,29 +49,53 @@ router.get('/', (req, res) => {
   });
 });
 
-// READ a single product_group by ID
+// Count
+router.get('/count', (req, res) => {
+  const { firmId,app } = req.query;
+
+  let sql = 'SELECT COUNT(*) AS count FROM tags';
+  let queryParams = [];
+
+  if (firmId) {
+    sql += ' WHERE owner = ?';
+    queryParams.push(firmId);
+  }
+  if (app) {
+    sql += firmId ? ' AND app = ?' : ' WHERE app = ?';
+    queryParams.push(app);
+  }
+
+  db.query(sql, queryParams, (err, results) => {
+    if (err) {
+      return res.status(500).send(err);
+    }
+    res.json({ count: results[0].count });
+  });
+});
+
+// READ a single category by ID
 router.get('/:id', (req, res) => {
   const { id } = req.params;
-  const sql = 'SELECT * FROM product_groups WHERE id = ?';
+  const sql = 'SELECT * FROM tags WHERE id = ?';
   db.query(sql, [id], (err, results) => {
     if (err) {
       return res.status(500).send(err);
     }
     if (results.length === 0) {
-      return res.status(404).send('product group not found');
+      return res.status(404).send('tag not found');
     }
     res.json(results[0]);
   });
 });
 
-// UPDATE a product_group by ID
+// UPDATE a category by ID
 
 router.put('/:id', (req, res) => {
   const { id } = req.params;
   const fields = req.body; // Get the fields from the request body
 
   // Start building the SQL query
-  let sql = 'UPDATE product_groups SET ';
+  let sql = 'UPDATE tags SET ';
   const queryParams = [];
 
   // Loop through the fields and dynamically add them to the query
@@ -84,39 +106,34 @@ router.put('/:id', (req, res) => {
     }
   }
 
-  // Remove the last comma and space from the SQL query
-  sql = sql.slice(0, -2); // Remove the last comma and space
-
-  // Add the WHERE clause
-  sql += ' WHERE id = ?';
-  queryParams.push(Number(id));
+  // Remove trailing comma and space, then add WHERE clause
+  sql = sql.slice(0, -2) + ' WHERE id = ?';
+  queryParams.push(id);
 
   // Execute the query
   db.query(sql, queryParams, (err, results) => {
     if (err) {
-      console.log(err);
       return res.status(500).send(err);
     }
     if (results.affectedRows === 0) {
-      return res.status(404).send('Product Group not found');
+      return res.status(404).send('Tag not found');
     }
-    res.json({ message: 'Product Group updated successfully' });
+    res.json({ message: 'Tag updated successfully' });
   });
 });
 
 
-// DELETE a product_group by ID
 router.delete('/:id', (req, res) => {
   const { id } = req.params;
-  const sql = 'DELETE FROM product_groups WHERE id = ?';
+  const sql = 'DELETE FROM tags WHERE id = ?';
   db.query(sql, [id], (err, results) => {
     if (err) {
       return res.status(500).send(err);
     }
     if (results.affectedRows === 0) {
-      return res.status(404).send('Product Group not found');
+      return res.status(404).send('tag not found');
     }
-    res.json({ message: 'Product Group deleted successfully' });
+    res.json({ message: 'tag deleted successfully' });
   });
 });
 

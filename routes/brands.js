@@ -32,17 +32,17 @@ router.post('/', (req, res) => {
 
 // READ all categories
 router.get('/', (req, res) => {
-  const { owner,app } = req.query; // Extract 'owner' from the query string
+  const { firmId,app } = req.query; // Extract 'firmId' from the query string
 
   let sql = 'SELECT * FROM brands';
   let queryParams = [];
 
-  if (owner) {
+  if (firmId) {
     sql += ' WHERE owner = ?';
-    queryParams.push(owner);
+    queryParams.push(firmId);
   }
   if (app) {
-    sql += ' WHERE app = ?';
+    sql += firmId ? ' AND app = ?' : ' WHERE app = ?';
     queryParams.push(app);
   }
 
@@ -54,6 +54,25 @@ router.get('/', (req, res) => {
   });
 });
 
+router.get('/count', (req, res) => {
+  const { firmId } = req.query;
+
+  let sql = 'SELECT COUNT(*) AS count FROM brands';
+  let queryParams = [];
+
+  if (firmId) {
+    sql += ' WHERE owner = ?';
+    queryParams.push(firmId);
+  }
+  
+
+  db.query(sql, queryParams, (err, results) => {
+    if (err) {
+      return res.status(500).send(err);
+    }
+    res.json({ count: results[0].count });
+  });
+});
 // READ a single category by ID
 router.get('/:id', (req, res) => {
   const { id } = req.params;

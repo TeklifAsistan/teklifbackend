@@ -54,67 +54,68 @@ const insertLog = (tableName, actionType, details, resolve, reject) => {
 };
 
 const getLogs = (owner, userid, isFirmOwner) => {
-    return new Promise((resolve, reject) => {
-      if (isFirmOwner==="true") {
-        // Fetch all log tables starting with `Logs_${owner}_`
-        const getTablesSql = `
-          SELECT table_name 
-          FROM information_schema.tables 
-          WHERE table_name LIKE 'Logs_${owner}_%'
-        `;
-  
-        db.query(getTablesSql, (err, tables) => {
-          if (err) return reject(err);
-  
-          if (tables.length === 0) {
-            return resolve([]); // No log tables found for the firm
-          }
-  
-          // Fetch logs from each table and combine them
-          const allLogsPromises = tables.map(table => {
-            const tableName = table.table_name;
-            return new Promise((resolve, reject) => {
-              const fetchLogsSql = `SELECT * FROM ${tableName} ORDER BY createdAt DESC`;
-              db.query(fetchLogsSql, (err, logs) => {
-                if (err) return reject(err);
-                resolve(logs);
-              });
-            });
-          });
-  
-          // Combine logs from all tables
-          Promise.all(allLogsPromises)
-            .then(logsArrays => {
-              const combinedLogs = [].concat(...logsArrays); // Merge logs arrays
-              resolve(combinedLogs);
-            })
-            .catch(reject);
-        });
-      } else {
-        // Fetch logs for a specific user only
-        const logTableName = `Logs_${owner}_${userid}`;
-        const checkTableExists = `
-          SELECT table_name 
-          FROM information_schema.tables 
-          WHERE table_name = ? LIMIT 1
-        `;
-        db.query(checkTableExists, [logTableName], (err, result) => {
-          if (err) return reject(err);
-  
-          if (result.length > 0) {
-            const fetchLogsSql = `SELECT * FROM ${logTableName} ORDER BY createdAt DESC`;
+  return new Promise((resolve, reject) => {
+    if (isFirmOwner === "true") {
+      // Fetch all log tables starting with `Logs_${owner}_`
+      const getTablesSql = `
+        SELECT table_name 
+        FROM information_schema.tables 
+        WHERE table_name LIKE 'Logs_${owner}_%'
+      `;
+
+      db.query(getTablesSql, (err, tables) => {
+        if (err) return reject(err);
+
+        if (tables.length === 0) {
+          return resolve([]); // No log tables found for the firm
+        }
+
+        // Fetch logs from each table, ordered by createdAt DESC
+        const allLogsPromises = tables.map((table) => {
+          const tableName = table.table_name;
+          return new Promise((resolve, reject) => {
+            const fetchLogsSql = `SELECT * FROM ${tableName} ORDER BY createdAt DESC`;
             db.query(fetchLogsSql, (err, logs) => {
               if (err) return reject(err);
               resolve(logs);
             });
-          } else {
-            resolve([]); // No logs found for the specific user
-          }
+          });
         });
-      }
-    });
-  };
-  
+
+        // Combine logs from all tables and order the combined logs by createdAt DESC
+        Promise.all(allLogsPromises)
+          .then((logsArrays) => {
+            const combinedLogs = [].concat(...logsArrays);
+            combinedLogs.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)); // Sort combined logs
+            resolve(combinedLogs);
+          })
+          .catch(reject);
+      });
+    } else {
+      // Fetch logs for a specific user only
+      const logTableName = `Logs_${owner}_${userid}`;
+      const checkTableExists = `
+        SELECT table_name 
+        FROM information_schema.tables 
+        WHERE table_name = ? LIMIT 1
+      `;
+      db.query(checkTableExists, [logTableName], (err, result) => {
+        if (err) return reject(err);
+
+        if (result.length > 0) {
+          const fetchLogsSql = `SELECT * FROM ${logTableName} ORDER BY createdAt DESC`;
+          db.query(fetchLogsSql, (err, logs) => {
+            if (err) return reject(err);
+            resolve(logs);
+          });
+        } else {
+          resolve([]); // No logs found for the specific user
+        }
+      });
+    }
+  });
+};
+
   // Route to fetch logs
   router.get('/logs', async (req, res) => {
     const { owner, userid, isFirmOwner } = req.query;

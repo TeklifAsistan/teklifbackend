@@ -34,13 +34,10 @@ router.post('/', (req, res) => {
     url,
     tags,
     price,
-    formalPrice,
-    prices,
     stock,
     criticStock,
     category,
     bundle,
-    discount,
     tax,
     source,
     teminTermin,
@@ -57,6 +54,12 @@ router.post('/', (req, res) => {
     vulnerable,
     eCommerced,
     firmId,
+    unit,
+    warranty,
+    mbf,//must be followed
+    mbfPeriod,
+    PBSList,
+
   } = req.body;
 
 
@@ -92,15 +95,23 @@ router.post('/', (req, res) => {
         discount,
         onSale,
         bundle,
-        source
+        source,
+        unit,
+        warranty,
+        mbf,
+        mbfPeriod,
+        PBSList
+
       ) VALUES (
-        ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
         ?, ?, ?, ?, ?, ?, ?, ?, ?,
-        ?, ?, ?, ?, ?, ?, ?, ?,
-        ?, ?, ?, ?, ?, ?, ?, ?,
+        ?, ?, ?, ?, ?, ?, ?, ?, ?,
+        ?, ?, ?, ?, ?, ?, ?, ?, ?,
+        ?, ?, ?, ?, ?, ?, ?, ?, ?,
+        ?, ?, ?, ?
       )`;
       const imagesArray = images ? JSON.stringify(images.split(',')) : null;
       const tagsArray = tags ? JSON.stringify(tags.split(',')) : null;
+      const PBSListArray = PBSList ? JSON.stringify(PBSList.split(',')) : null;
       let bundleArray;
       if (Array.isArray(bundle)) {
         bundleArray = JSON.stringify(bundle); // If it's an array, convert it to a JSON string
@@ -131,20 +142,25 @@ router.post('/', (req, res) => {
         tagsArray,// tags
         content, // content
         teminTermin, // teminTermin
-        true, // active
-        active, // onPremise
+        active || true, // active
+        onPremise, // onPremise
         vulnerable, // vulnerable
         eCommerced, // eCommerced
         new Date(), // createdAt
         new Date(), // updatedAt
         url, // url
-        0, // formalPrice
+        "0", // formalPrice
         '[]', // prices
         category, // category
-        0, // discount
+        "0", // discount
         onSale, // onSale
         bundleArray, //bundle
         source, // source
+        unit,
+        warranty,
+        mbf,
+        mbfPeriod,
+        PBSListArray
       ];
 
   db.query(sql, values, (err, results) => {
@@ -223,7 +239,12 @@ router.post('/create-table', async (req, res) => {
           discount VARCHAR(25),
           onSale BOOLEAN, 
           bundle JSON,
-          source VARCHAR(255)
+          source VARCHAR(255),
+          unit VARCHAR(255),
+          warranty VARCHAR(25),
+          mbf BOOLEAN,
+          mbfPeriod VARCHAR(25),
+          PBSList JSON
         );
       `;
 
@@ -265,7 +286,6 @@ router.post('/upload', upload.single('file'), (req, res) => {
       'Stok Kodu *': 'stockCode',
       'Barkod *': 'barcode',
       'Ürün Adı *': 'productName',
-      'Marka *': 'brand',
       'Fotoğraflar': 'images',
       'Açıklama': 'description',
       'Alış Fiyatı': 'purPrice',
@@ -277,8 +297,10 @@ router.post('/upload', upload.single('file'), (req, res) => {
       'Tax (Rakam ile) *': 'tax',
       'Menşe': 'origin',
       'İlgili Firma': 'relatedFirm',
-      'Desi': 'desi',
-      'Ölçüleri (en x boy x yük)': 'dimensions'
+      'Garanti Süresi': 'warranty',
+      'Takip Edilmeli mi':'mbf',
+      'Birim':"unit"
+
     };
 
     const transformedData = jsonData.map((item) => {
@@ -295,14 +317,18 @@ router.post('/upload', upload.single('file'), (req, res) => {
     // Loop through the JSON data and insert into the database
     const promises = transformedData.map((product) => {
       const {
-        stockCode, barcode, productName, brand, images, description, tags,
-        price, stock, criticStock, bundle, tax,
+        stockCode, barcode, productName,  images, description, 
+        price, stock, criticStock,  tax,
         purPrice, saleCurrency, purCurrency, origin, relatedFirm,
-        desi, dimensions,
+        warranty, mbf, unit
       } = product;
 
       const sql = `INSERT INTO ${tableName} (
-        id, stockCode, barcode, productName, brand,
+        id, 
+        stockCode, 
+        barcode, 
+        productName, 
+        brand,
         images,
         description,
         purPrice,
@@ -332,12 +358,18 @@ router.post('/upload', upload.single('file'), (req, res) => {
         discount,
         onSale,
         bundle,
-        source
+        source,
+        unit,
+        warranty,
+        mbf,
+        mbfPeriod,
+        PBSList
       ) VALUES (
-        ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
         ?, ?, ?, ?, ?, ?, ?, ?, ?,
-        ?, ?, ?, ?, ?, ?, ?, ?,
-        ?, ?, ?, ?, ?, ?, ?, ?
+        ?, ?, ?, ?, ?, ?, ?, ?, ?,
+        ?, ?, ?, ?, ?, ?, ?, ?, ?,
+        ?, ?, ?, ?, ?, ?, ?, ?, ?,
+        ?, ?, ?, ?
       )`;
 
       // Convert arrays to strings, handle booleans as well
@@ -347,12 +379,12 @@ router.post('/upload', upload.single('file'), (req, res) => {
 
 
       const values = [
-        id,
+        generateShortUUID(),
         stockCode, 
         barcode, 
         productName, 
-        brand,
-        imagesArray || '[]',
+        null,
+        imagesArray,
         description,
         purPrice,
         purCurrency,
@@ -363,9 +395,9 @@ router.post('/upload', upload.single('file'), (req, res) => {
         tax,
         origin,
         relatedFirm,
-        desi,
-        dimensions,
-        "[]",// tags
+        null,
+        null,
+        null,// tags
         '', // content
         '', // teminTermin
         true, // active
@@ -380,13 +412,19 @@ router.post('/upload', upload.single('file'), (req, res) => {
         '', // category
         0, // discount
         false, // onSale
-        '[]', //bundle
+        null, //bundle
         '', // source
+        unit,//unit
+        warranty,
+        true,
+        null,
+        null
       ];
 
       return new Promise((resolve, reject) => {
         db.query(sql, values, (err, results) => {
           if (err) {
+            console.log(err)
             reject(err);
           } else {
             resolve(results);
@@ -400,8 +438,9 @@ router.post('/upload', upload.single('file'), (req, res) => {
       .then(() => res.json({ message: 'Products uploaded successfully' }))
       .catch((error) => {
         console.log(error)
-        res.status(500).send(error.message)});
+        res.status(500).send(error)});
   } catch (error) {
+    console.log(error)
     return res.status(500).send('Error processing the file: ' + error.message);
   }
 });
@@ -412,6 +451,74 @@ router.get('/', (req, res) => {
   const { firmId } = req.query; // Extract 'owner' from the query string
 
   const sql = `SELECT * FROM products_${firmId}`;
+  db.query(sql, (err, results) => {
+    if (err) {
+      return res.status(500).send(err);
+    }
+    res.json(results);
+  });
+});
+
+router.get('/count', (req, res) => {
+  const { firmId } = req.query;
+
+  const tableName = `products_${firmId}`;
+
+  let sql = `SELECT COUNT(*) AS count FROM ${tableName}`;
+  let queryParams = [];
+
+
+
+  db.query(sql, queryParams, (err, results) => {
+    if (err) {
+      return res.status(500).send(err);
+    }
+    res.json({ count: results[0].count });
+  });
+});
+
+router.get('/byBrand', (req, res) => {
+  const { firmId, brand } = req.query;
+
+  // Ensure firmId is provided
+  if (!firmId) {
+    return res.status(400).send("firmId is required");
+  }
+
+  // Base SQL query
+  let sql = `SELECT * FROM products_${firmId}`;
+
+  // Add brand filter if provided
+  if (brand) {
+    sql += ` WHERE brand = ${db.escape(brand)}`; // Use db.escape to prevent SQL injection
+  }
+
+  // Execute the query
+  db.query(sql, (err, results) => {
+    if (err) {
+      return res.status(500).send(err);
+    }
+    res.json(results);
+  });
+});
+
+router.get('/byGroup', (req, res) => {
+  const { firmId, bundle } = req.query;
+
+  // Ensure firmId is provided
+  if (!firmId) {
+    return res.status(400).send("firmId is required");
+  }
+
+  // Base SQL query
+  let sql = `SELECT * FROM products_${firmId}`;
+
+  // Add bundle filter if provided
+  if (bundle) {
+    sql += ` WHERE JSON_CONTAINS(bundle, JSON_QUOTE(${db.escape(bundle)}))`; // Use db.escape to prevent SQL injection
+  }
+
+  // Execute the query
   db.query(sql, (err, results) => {
     if (err) {
       return res.status(500).send(err);

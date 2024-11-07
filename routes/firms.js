@@ -316,6 +316,27 @@ router.get('/', (req, res) => {
   });
 });
 
+router.get('/count', (req, res) => {
+  const { firmId } = req.query;
+
+  let sql = 'SELECT COUNT(*) AS count FROM firms';
+  let queryParams = [];
+
+  if (firmId) {
+    sql += ' WHERE dataOwner = ?';
+    queryParams.push(firmId);
+  }
+  
+
+  db.query(sql, queryParams, (err, results) => {
+    if (err) {
+      return res.status(500).send(err);
+    }
+    res.json({ count: results[0].count });
+  });
+});
+
+
 // READ a single product by ID
 router.get('/:id', (req, res) => {
   const { id } = req.params;

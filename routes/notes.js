@@ -1,41 +1,34 @@
-// routes/categories.js
+// routes/offerNotes.js
 const express = require('express');
 const router = express.Router();
 const db = require('../config/db');
 
-const generateUniqueId = () => {
-  return String(Math.floor(100000 + Math.random() * 900000));
-};
-// CREATE a new category
+
+// CREATE a new tag
 router.post('/', (req, res) => {
-  const { id,title, parent,app, owner,userid, active, url } = req.body;
+  const { id, text, app, owner, userid, tags } = req.body;
 
-  // Generate a 6-digit unique number for the category ID
-  const uniqueId = generateUniqueId();
 
-  // Get the current timestamp for createdAt
-  const createdAt = new Date();
-  const updatedAt = new Date();
 
-  // Modify the SQL query to include id and createdAt
-  const sql = 'INSERT INTO categories (id, title, parent,app, owner, userid, active,createdAt,updatedAt, url) VALUES (?, ?, ?,?, ?,?, ?, ?,?,?)';
-  
-  // Pass the generated id and current timestamp along with other values
-  db.query(sql, [id, title, parent, app, owner,userid, active,createdAt,updatedAt, url,], (err, result) => {
+  const sql = 'INSERT INTO notes (id, text, app, owner, userid, tags, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?)';
+
+  const tagsArray = tags ? JSON.stringify(tags) : null;
+
+  db.query(sql, [id, text, app, owner, userid, tagsArray, new Date()], (err, result) => {
     if (err) {
       console.log(err)
       return res.status(500).send(err);
 
     }
-    res.status(201).json({ message: 'Category created', categoryId: id });
+    res.status(201).json({ message: 'Note created', noteId: id });
   });
 });
 
-// READ all categories
+// READ all notes
 router.get('/', (req, res) => {
   const { firmId,app } = req.query; // Extract 'firmId' from the query string
 
-  let sql = 'SELECT * FROM categories';
+  let sql = 'SELECT * FROM notes';
   let queryParams = [];
 
   if (firmId) {
@@ -60,7 +53,7 @@ router.get('/', (req, res) => {
 router.get('/count', (req, res) => {
   const { firmId,app } = req.query;
 
-  let sql = 'SELECT COUNT(*) AS count FROM categories';
+  let sql = 'SELECT COUNT(*) AS count FROM notes';
   let queryParams = [];
 
   if (firmId) {
@@ -83,13 +76,13 @@ router.get('/count', (req, res) => {
 // READ a single category by ID
 router.get('/:id', (req, res) => {
   const { id } = req.params;
-  const sql = 'SELECT * FROM categories WHERE id = ?';
+  const sql = 'SELECT * FROM notes WHERE id = ?';
   db.query(sql, [id], (err, results) => {
     if (err) {
       return res.status(500).send(err);
     }
     if (results.length === 0) {
-      return res.status(404).send('category not found');
+      return res.status(404).send('note not found');
     }
     res.json(results[0]);
   });
@@ -99,11 +92,10 @@ router.get('/:id', (req, res) => {
 
 router.put('/:id', (req, res) => {
   const { id } = req.params;
-  const updatedAt = new Date();
   const fields = req.body; // Get the fields from the request body
 
   // Start building the SQL query
-  let sql = 'UPDATE categories SET ';
+  let sql = 'UPDATE notes SET ';
   const queryParams = [];
 
   // Loop through the fields and dynamically add them to the query
@@ -114,9 +106,9 @@ router.put('/:id', (req, res) => {
     }
   }
 
-  // Add updatedAt field
-  sql += 'updatedAt = ? WHERE id = ?';
-  queryParams.push(updatedAt, id);
+  // Remove trailing comma and space, then add WHERE clause
+  sql = sql.slice(0, -2) + ' WHERE id = ?';
+  queryParams.push(id);
 
   // Execute the query
   db.query(sql, queryParams, (err, results) => {
@@ -124,39 +116,22 @@ router.put('/:id', (req, res) => {
       return res.status(500).send(err);
     }
     if (results.affectedRows === 0) {
-      return res.status(404).send('Category not found');
+      return res.status(404).send('Note not found');
     }
-    res.json({ message: 'Category updated successfully' });
+    res.json({ message: 'Note updated successfully' });
   });
 });
-
-// router.put('/:id', (req, res) => {
-//   const { id } = req.params;
-//   const { name, address } = req.body;
-//   const sql = 'UPDATE categories SET name = ?, address = ? WHERE id = ?';
-//   db.query(sql, [name, address, id], (err, results) => {
-//     if (err) {
-//       return res.status(500).send(err);
-//     }
-//     if (results.affectedRows === 0) {
-//       return res.status(404).send('category not found');
-//     }
-//     res.json({ message: 'category updated successfully' });
-//   });
-// });
-
-// DELETE a category by ID
 router.delete('/:id', (req, res) => {
   const { id } = req.params;
-  const sql = 'DELETE FROM categories WHERE id = ?';
+  const sql = 'DELETE FROM notes WHERE id = ?';
   db.query(sql, [id], (err, results) => {
     if (err) {
       return res.status(500).send(err);
     }
     if (results.affectedRows === 0) {
-      return res.status(404).send('category not found');
+      return res.status(404).send('note not found');
     }
-    res.json({ message: 'category deleted successfully' });
+    res.json({ message: 'note deleted successfully' });
   });
 });
 
