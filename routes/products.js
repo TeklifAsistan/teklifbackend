@@ -20,6 +20,25 @@ function generateShortUUID() {
   return randomNumber.toString();
 }
 
+function convertToSlug(title) {
+  // Define a map to replace Turkish characters with English equivalents
+  const turkishMap = {
+    'Ç': 'C', 'Ö': 'O', 'Ş': 'S', 'İ': 'I', 'Ü': 'U', 'Ğ': 'G',
+    'ç': 'c', 'ö': 'o', 'ş': 's', 'ı': 'i', 'ü': 'u', 'ğ': 'g'
+  };
+
+  // Replace Turkish characters
+  let slug = title.replace(/[ÇÖŞİÜĞçöşüğı]/g, (char) => turkishMap[char] || char);
+
+  // Convert to lowercase, remove non-alphanumeric characters except for hyphens, and replace spaces with hyphens
+  slug = slug.toLowerCase()
+             .replace(/[^a-z0-9\s-]/g, '')  // Remove special characters
+             .trim()
+             .replace(/\s+/g, '-');         // Replace spaces with hyphens
+
+  return slug;
+}
+
 // CREATE a new product
 router.post('/', (req, res) => {
   const {
@@ -261,10 +280,43 @@ router.post('/create-table', async (req, res) => {
 });
 
 
+const addOrGetBrandId = async (brandTitle,owner) => {
+  return new Promise((resolve, reject) => {
+    // Check if the brand already exists
+    const checkSql = 'SELECT id FROM brands WHERE title = ? AND owner = ?';
+    db.query(checkSql, [brandTitle,owner], (err, results) => {
+      if (err) {
+        return reject(err);
+      }
 
 
-router.post('/upload', upload.single('file'), (req, res) => {
-  // Extract firmId from the query parameters
+      if (results.length > 0) {
+        // Brand exists, return the existing ID
+        resolve(results[0].id);
+      } else {
+        function generateShortUUID() {
+          const min = 1000000; // Minimum 7-digit number (inclusive)
+          const max = 9999999; // Maximum 7-digit number (inclusive)
+          const randomNumber = Math.floor(Math.random() * (max - min + 1)) + min;
+          return randomNumber.toString();
+        }
+        // Brand doesn't exist, insert new brand and get the new ID
+        const uniqueId = generateShortUUID();
+        const url=convertToSlug(brandTitle);
+        const createdAt = new Date();
+        const insertSql = 'INSERT INTO brands (id, title, parent,app, owner,userid,createdAt, url) VALUES (?, ?, ?, ?, ?, ?, ?, ?)';
+        db.query(insertSql, [uniqueId, brandTitle, null, null, owner,null, createdAt, url ], (insertErr) => {
+          if (insertErr) {
+            return reject(insertErr);
+          }
+          resolve(uniqueId); // Return the new brand ID
+        });
+      }
+    });
+  });
+};
+
+router.post('/upload', upload.single('file'), async (req, res) => {
   const { firmId } = req.query;
 
   if (!firmId) {
@@ -274,11 +326,10 @@ router.post('/upload', upload.single('file'), (req, res) => {
   if (!req.file) {
     return res.status(400).send('No file uploaded.');
   }
-  
+
   try {
-    // Read the Excel file
     const workbook = xlsx.readFile(req.file.path);
-    const sheetName = workbook.SheetNames[0]; // Assuming single-sheet files
+    const sheetName = workbook.SheetNames[0];
     const worksheet = workbook.Sheets[sheetName];
     const jsonData = xlsx.utils.sheet_to_json(worksheet);
 
@@ -286,6 +337,7 @@ router.post('/upload', upload.single('file'), (req, res) => {
       'Stok Kodu *': 'stockCode',
       'Barkod *': 'barcode',
       'Ürün Adı *': 'productName',
+      'Marka': 'brand',  // Assuming there's a "Marka" column
       'Fotoğraflar': 'images',
       'Açıklama': 'description',
       'Alış Fiyatı': 'purPrice',
@@ -298,133 +350,45 @@ router.post('/upload', upload.single('file'), (req, res) => {
       'Menşe': 'origin',
       'İlgili Firma': 'relatedFirm',
       'Garanti Süresi': 'warranty',
-      'Takip Edilmeli mi':'mbf',
-      'Birim':"unit"
-
+      'Takip Edilmeli mi': 'mbf',
+      'Birim': 'unit'
     };
 
-    const transformedData = jsonData.map((item) => {
+    const transformedData = await Promise.all(jsonData.map(async (item) => {
       const transformedItem = {};
-      Object.keys(headerMapping).forEach((key) => {
+      for (const key in headerMapping) {
         transformedItem[headerMapping[key]] = item[key] || null;
-      });
-      return transformedItem;
-    });
-    // Define the table name
-    const tableName = `products_${firmId}`;
-    const id = generateShortUUID();
+      }
 
-    // Loop through the JSON data and insert into the database
+      if (transformedItem.brand) {
+        transformedItem.brand = await addOrGetBrandId(transformedItem.brand,firmId);
+      }
+
+      return transformedItem;
+    }));
+
+    const tableName = `products_${firmId}`;
+
     const promises = transformedData.map((product) => {
-      const {
-        stockCode, barcode, productName,  images, description, 
-        price, stock, criticStock,  tax,
-        purPrice, saleCurrency, purCurrency, origin, relatedFirm,
-        warranty, mbf, unit
-      } = product;
+      const { stockCode, barcode, productName, brand, images, description, price, stock, criticStock, tax, purPrice, saleCurrency, purCurrency, origin, relatedFirm, warranty, mbf, unit } = product;
 
       const sql = `INSERT INTO ${tableName} (
-        id, 
-        stockCode, 
-        barcode, 
-        productName, 
-        brand,
-        images,
-        description,
-        purPrice,
-        purCurrency,
-        price,
-        saleCurrency,        
-        stock,
-        criticStock,
-        tax,
-        origin,
-        relatedFirm,
-        desi,
-        dimensions,
-        tags,
-        content,
-        teminTermin,
-        active,
-        onPremise,
-        vulnerable,
-        eCommerced,
-        createdAt,
-        updatedAt,
-        url,
-        formalPrice,
-        prices,
-        category,
-        discount,
-        onSale,
-        bundle,
-        source,
-        unit,
-        warranty,
-        mbf,
-        mbfPeriod,
-        PBSList
-      ) VALUES (
-        ?, ?, ?, ?, ?, ?, ?, ?, ?,
-        ?, ?, ?, ?, ?, ?, ?, ?, ?,
-        ?, ?, ?, ?, ?, ?, ?, ?, ?,
-        ?, ?, ?, ?, ?, ?, ?, ?, ?,
-        ?, ?, ?, ?
-      )`;
-
-      // Convert arrays to strings, handle booleans as well
-      const imagesArray = images ? JSON.stringify(images.split(',')) : null;
-      //const tagsArray = tags ? JSON.stringify(tags.split(',')) : null;
-      //const bundleArray = bundle ? JSON.stringify(bundle.split(',')) : null;
-
+        id, stockCode, barcode, productName, brand, images, description, purPrice, purCurrency, price, saleCurrency, stock, criticStock, tax, origin, relatedFirm, unit, warranty, mbf, createdAt, updatedAt, active
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
 
       const values = [
         generateShortUUID(),
-        stockCode, 
-        barcode, 
-        productName, 
-        null,
-        imagesArray,
-        description,
-        purPrice,
-        purCurrency,
-        price,
-        saleCurrency,
-        stock,
-        criticStock,
-        tax,
-        origin,
-        relatedFirm,
-        null,
-        null,
-        null,// tags
-        '', // content
-        '', // teminTermin
-        true, // active
-        false, // onPremise
-        false, // vulnerable
-        true, // eCommerced
-        new Date(), // createdAt
-        new Date(), // updatedAt
-        '', // url
-        0, // formalPrice
-        '[]', // prices
-        '', // category
-        0, // discount
-        false, // onSale
-        null, //bundle
-        '', // source
-        unit,//unit
-        warranty,
-        true,
-        null,
-        null
+        stockCode, barcode, productName, brand,
+        images ? JSON.stringify(images.split(',')) : null,
+        description, purPrice, purCurrency, price, saleCurrency,
+        stock, criticStock, tax, origin, relatedFirm,
+        unit, warranty, mbf, new Date(), new Date(), true
       ];
 
       return new Promise((resolve, reject) => {
         db.query(sql, values, (err, results) => {
           if (err) {
-            console.log(err)
+            console.log(err);
             reject(err);
           } else {
             resolve(results);
@@ -433,17 +397,196 @@ router.post('/upload', upload.single('file'), (req, res) => {
       });
     });
 
-    // Execute all insertions
-    Promise.all(promises)
-      .then(() => res.json({ message: 'Products uploaded successfully' }))
-      .catch((error) => {
-        console.log(error)
-        res.status(500).send(error)});
+    await Promise.all(promises);
+    res.json({ message: 'Products uploaded successfully' });
   } catch (error) {
-    console.log(error)
-    return res.status(500).send('Error processing the file: ' + error.message);
+    console.log(error);
+    res.status(500).send('Error processing the file: ' + error.message);
   }
 });
+
+
+// router.post('/upload', upload.single('file'), (req, res) => {
+//   // Extract firmId from the query parameters
+//   const { firmId } = req.query;
+
+//   if (!firmId) {
+//     return res.status(400).send('firmId is required.');
+//   }
+
+//   if (!req.file) {
+//     return res.status(400).send('No file uploaded.');
+//   }
+  
+//   try {
+//     // Read the Excel file
+//     const workbook = xlsx.readFile(req.file.path);
+//     const sheetName = workbook.SheetNames[0]; // Assuming single-sheet files
+//     const worksheet = workbook.Sheets[sheetName];
+//     const jsonData = xlsx.utils.sheet_to_json(worksheet);
+
+//     const headerMapping = {
+//       'Stok Kodu *': 'stockCode',
+//       'Barkod *': 'barcode',
+//       'Ürün Adı *': 'productName',
+//       'Fotoğraflar': 'images',
+//       'Açıklama': 'description',
+//       'Alış Fiyatı': 'purPrice',
+//       'Alış Kuru': 'purCurrency',
+//       'Satış Fiyatı *': 'price',
+//       'Satış Kuru': 'saleCurrency',
+//       'Stok *': 'stock',
+//       'Kritik Stok': 'criticStock',
+//       'Tax (Rakam ile) *': 'tax',
+//       'Menşe': 'origin',
+//       'İlgili Firma': 'relatedFirm',
+//       'Garanti Süresi': 'warranty',
+//       'Takip Edilmeli mi':'mbf',
+//       'Birim':"unit"
+
+//     };
+
+//     const transformedData = jsonData.map((item) => {
+//       const transformedItem = {};
+//       Object.keys(headerMapping).forEach((key) => {
+//         transformedItem[headerMapping[key]] = item[key] || null;
+//       });
+//       return transformedItem;
+//     });
+//     // Define the table name
+//     const tableName = `products_${firmId}`;
+//     const id = generateShortUUID();
+
+//     // Loop through the JSON data and insert into the database
+//     const promises = transformedData.map((product) => {
+//       const {
+//         stockCode, barcode, productName,  images, description, 
+//         price, stock, criticStock,  tax,
+//         purPrice, saleCurrency, purCurrency, origin, relatedFirm,
+//         warranty, mbf, unit
+//       } = product;
+
+//       const sql = `INSERT INTO ${tableName} (
+//         id, 
+//         stockCode, 
+//         barcode, 
+//         productName, 
+//         brand,
+//         images,
+//         description,
+//         purPrice,
+//         purCurrency,
+//         price,
+//         saleCurrency,        
+//         stock,
+//         criticStock,
+//         tax,
+//         origin,
+//         relatedFirm,
+//         desi,
+//         dimensions,
+//         tags,
+//         content,
+//         teminTermin,
+//         active,
+//         onPremise,
+//         vulnerable,
+//         eCommerced,
+//         createdAt,
+//         updatedAt,
+//         url,
+//         formalPrice,
+//         prices,
+//         category,
+//         discount,
+//         onSale,
+//         bundle,
+//         source,
+//         unit,
+//         warranty,
+//         mbf,
+//         mbfPeriod,
+//         PBSList
+//       ) VALUES (
+//         ?, ?, ?, ?, ?, ?, ?, ?, ?,
+//         ?, ?, ?, ?, ?, ?, ?, ?, ?,
+//         ?, ?, ?, ?, ?, ?, ?, ?, ?,
+//         ?, ?, ?, ?, ?, ?, ?, ?, ?,
+//         ?, ?, ?, ?
+//       )`;
+
+//       // Convert arrays to strings, handle booleans as well
+//       const imagesArray = images ? JSON.stringify(images.split(',')) : null;
+//       //const tagsArray = tags ? JSON.stringify(tags.split(',')) : null;
+//       //const bundleArray = bundle ? JSON.stringify(bundle.split(',')) : null;
+
+
+//       const values = [
+//         generateShortUUID(),
+//         stockCode, 
+//         barcode, 
+//         productName, 
+//         null,
+//         imagesArray,
+//         description,
+//         purPrice,
+//         purCurrency,
+//         price,
+//         saleCurrency,
+//         stock,
+//         criticStock,
+//         tax,
+//         origin,
+//         relatedFirm,
+//         null,
+//         null,
+//         null,// tags
+//         '', // content
+//         '', // teminTermin
+//         true, // active
+//         false, // onPremise
+//         false, // vulnerable
+//         true, // eCommerced
+//         new Date(), // createdAt
+//         new Date(), // updatedAt
+//         '', // url
+//         0, // formalPrice
+//         '[]', // prices
+//         '', // category
+//         0, // discount
+//         false, // onSale
+//         null, //bundle
+//         '', // source
+//         unit,//unit
+//         warranty,
+//         true,
+//         null,
+//         null
+//       ];
+
+//       return new Promise((resolve, reject) => {
+//         db.query(sql, values, (err, results) => {
+//           if (err) {
+//             console.log(err)
+//             reject(err);
+//           } else {
+//             resolve(results);
+//           }
+//         });
+//       });
+//     });
+
+//     // Execute all insertions
+//     Promise.all(promises)
+//       .then(() => res.json({ message: 'Products uploaded successfully' }))
+//       .catch((error) => {
+//         console.log(error)
+//         res.status(500).send(error)});
+//   } catch (error) {
+//     console.log(error)
+//     return res.status(500).send('Error processing the file: ' + error.message);
+//   }
+// });
 
 
 // READ all products
