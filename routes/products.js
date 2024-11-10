@@ -280,15 +280,16 @@ router.post('/create-table', async (req, res) => {
 });
 
 
-const addOrGetBrandId = async (brandTitle,owner) => {
+const addOrGetBrandId = async (brandTitle, owner) => {
+  const normalizedBrandTitle = brandTitle ? brandTitle.trim().toLowerCase() : "";
+
   return new Promise((resolve, reject) => {
     // Check if the brand already exists
-    const checkSql = 'SELECT id FROM brands WHERE title = ? AND owner = ?';
-    db.query(checkSql, [brandTitle,owner], (err, results) => {
+    const checkSql = 'SELECT id FROM brands WHERE LOWER(title) = ? AND owner = ?';
+    db.query(checkSql, [normalizedBrandTitle, owner], (err, results) => {
       if (err) {
         return reject(err);
       }
-
 
       if (results.length > 0) {
         // Brand exists, return the existing ID
@@ -300,16 +301,32 @@ const addOrGetBrandId = async (brandTitle,owner) => {
           const randomNumber = Math.floor(Math.random() * (max - min + 1)) + min;
           return randomNumber.toString();
         }
-        // Brand doesn't exist, insert new brand and get the new ID
+
         const uniqueId = generateShortUUID();
-        const url=convertToSlug(brandTitle);
+        const url = convertToSlug(normalizedBrandTitle);
         const createdAt = new Date();
-        const insertSql = 'INSERT INTO brands (id, title, parent,app, owner,userid,createdAt, url) VALUES (?, ?, ?, ?, ?, ?, ?, ?)';
-        db.query(insertSql, [uniqueId, brandTitle, null, null, owner,null, createdAt, url ], (insertErr) => {
+        const insertSql = 'INSERT INTO brands (id, title, parent, app, owner, userid, createdAt, url) VALUES (?, ?, ?, ?, ?, ?, ?, ?)';
+
+        db.query(insertSql, [uniqueId, brandTitle.trim(), null, null, owner, null, createdAt, url], (insertErr) => {
           if (insertErr) {
-            return reject(insertErr);
+            if (insertErr.code === 'ER_DUP_ENTRY') {
+              // Eğer aynı anda başka bir işlem tarafından eklenmişse, tekrar sorgulayın
+              db.query(checkSql, [normalizedBrandTitle, owner], (err2, results2) => {
+                if (err2) {
+                  return reject(err2);
+                }
+                if (results2.length > 0) {
+                  resolve(results2[0].id);
+                } else {
+                  reject(new Error('Failed to insert and retrieve brand.'));
+                }
+              });
+            } else {
+              return reject(insertErr);
+            }
+          } else {
+            resolve(uniqueId); // Return the new brand ID
           }
-          resolve(uniqueId); // Return the new brand ID
         });
       }
     });
@@ -326,6 +343,9 @@ router.post('/upload', upload.single('file'), async (req, res) => {
   if (!req.file) {
     return res.status(400).send('No file uploaded.');
   }
+
+  // Marka önbelleği
+  const brandCache = new Map();
 
   try {
     const workbook = xlsx.readFile(req.file.path);
@@ -354,23 +374,59 @@ router.post('/upload', upload.single('file'), async (req, res) => {
       'Birim': 'unit'
     };
 
-    const transformedData = await Promise.all(jsonData.map(async (item) => {
+    // Önce tüm benzersiz markaları topla
+    const uniqueBrands = [
+      ...new Set(
+        jsonData
+          .map(item => item['Marka'])
+          .filter(brand => brand && brand.trim().length > 0)
+          .map(brand => brand.trim())
+      )
+    ];
+
+    // Marka ID'lerini al veya ekle ve önbelleğe koy
+    for (const brand of uniqueBrands) {
+      const brandId = await addOrGetBrandId(brand, firmId);
+      brandCache.set(brand.toLowerCase(), brandId);
+    }
+
+    const transformedData = jsonData.map(item => {
       const transformedItem = {};
       for (const key in headerMapping) {
         transformedItem[headerMapping[key]] = item[key] || null;
       }
 
       if (transformedItem.brand) {
-        transformedItem.brand = await addOrGetBrandId(transformedItem.brand,firmId);
+        const normalizedBrand = transformedItem.brand.trim().toLowerCase();
+        transformedItem.brand = brandCache.get(normalizedBrand) || null;
       }
 
       return transformedItem;
-    }));
+    });
 
     const tableName = `products_${firmId}`;
 
-    const promises = transformedData.map((product) => {
-      const { stockCode, barcode, productName, brand, images, description, price, stock, criticStock, tax, purPrice, saleCurrency, purCurrency, origin, relatedFirm, warranty, mbf, unit } = product;
+    const promises = transformedData.map(product => {
+      const {
+        stockCode,
+        barcode,
+        productName,
+        brand,
+        images,
+        description,
+        price,
+        stock,
+        criticStock,
+        tax,
+        purPrice,
+        saleCurrency,
+        purCurrency,
+        origin,
+        relatedFirm,
+        warranty,
+        mbf,
+        unit
+      } = product;
 
       const sql = `INSERT INTO ${tableName} (
         id, stockCode, barcode, productName, brand, images, description, purPrice, purCurrency, price, saleCurrency, stock, criticStock, tax, origin, relatedFirm, unit, warranty, mbf, createdAt, updatedAt, active
@@ -378,11 +434,27 @@ router.post('/upload', upload.single('file'), async (req, res) => {
 
       const values = [
         generateShortUUID(),
-        stockCode, barcode, productName, brand,
+        stockCode,
+        barcode,
+        productName,
+        brand,
         images ? JSON.stringify(images.split(',')) : null,
-        description, purPrice, purCurrency, price, saleCurrency,
-        stock, criticStock, tax, origin, relatedFirm,
-        unit, warranty, mbf, new Date(), new Date(), true
+        description,
+        purPrice,
+        purCurrency,
+        price,
+        saleCurrency,
+        stock,
+        criticStock,
+        tax,
+        origin,
+        relatedFirm,
+        unit,
+        warranty,
+        mbf,
+        new Date(),
+        new Date(),
+        true
       ];
 
       return new Promise((resolve, reject) => {
