@@ -137,9 +137,7 @@ router.post('/', (req, res) => {
 
 
 
-
-router.post('/upload', upload.single('file'), (req, res) => {
-  // Extract firmId from the query parameters
+router.post('/upload', upload.single('file'), async (req, res) => {
   const { firmId } = req.query;
 
   if (!firmId) {
@@ -153,28 +151,18 @@ router.post('/upload', upload.single('file'), (req, res) => {
   try {
     // Read the Excel file
     const workbook = xlsx.readFile(req.file.path);
-    const sheetName = workbook.SheetNames[0]; // Assuming single-sheet files
+    const sheetName = workbook.SheetNames[0];
     const worksheet = workbook.Sheets[sheetName];
     const jsonData = xlsx.utils.sheet_to_json(worksheet);
 
     const headerMapping = {
-      'Stok Kodu *': 'stockCode',
-      'Barkod *': 'barcode',
-      'Ürün Adı *': 'productName',
-      'Marka *': 'brand',
-      'Fotoğraflar': 'images',
-      'Açıklama': 'description',
-      'Alış Fiyatı': 'purPrice',
-      'Alış Kuru': 'purCurrency',
-      'Satış Fiyatı *': 'price',
-      'Satış Kuru': 'saleCurrency',
-      'Stok *': 'stock',
-      'Kritik Stok': 'criticStock',
-      'Tax (Rakam ile) *': 'tax',
-      'Menşe': 'origin',
-      'İlgili Firma': 'relatedFirm',
-      'Desi': 'desi',
-      'Ölçüleri (en x boy x yük)': 'dimensions'
+      'Firma Adı': 'firmName',
+      'Sektör': 'sector',
+      'İl': 'city',
+      'İlçe': 'region',
+      'Telefon': 'phone',
+      'E-Posta': 'email',
+      'Adres': 'address',
     };
 
     const transformedData = jsonData.map((item) => {
@@ -184,100 +172,90 @@ router.post('/upload', upload.single('file'), (req, res) => {
       });
       return transformedItem;
     });
-    // Define the table name
-    const tableName = `products_${firmId}`;
-    const id = generateShortUUID();
 
-    // Loop through the JSON data and insert into the database
-    const promises = transformedData.map((product) => {
+    // Get all existing firm names from the database
+    const [existingFirms] = await db.promise().query('SELECT firmName FROM firms');
+    const existingFirmNames = new Set(existingFirms.map((firm) => firm.firmName.toLowerCase()));
+
+    // Filter out duplicates from the transformed data based on firmName
+    const uniqueData = transformedData.filter((firm) => {
+      const firmName = firm.firmName && firm.firmName.toLowerCase();
+      if (firmName && !existingFirmNames.has(firmName)) {
+        existingFirmNames.add(firmName); // Add to set to avoid duplicates in the input data
+        return true;
+      }
+      return false; // Skip if duplicate
+    });
+
+    const tableName = `firms`;
+
+    // Prepare insert promises for each unique firm
+    const promises = uniqueData.map((firm) => {
       const {
-        stockCode, barcode, productName, brand, images, description, tags,
-        price, stock, criticStock, bundle, tax,
-        purPrice, saleCurrency, purCurrency, origin, relatedFirm,
-        desi, dimensions,
-      } = product;
+        firmName, sector, city, region, phone, email, address
+      } = firm;
+
+      // Generate a unique ID for each row
+      const id = generateShortUUID();
 
       const sql = `INSERT INTO ${tableName} (
-        id, stockCode, barcode, productName, brand,
+        id,
+        firmName,
+        dataOwner,
         images,
-        description,
-        purPrice,
-        purCurrency,
-        price,
-        saleCurrency,        
-        stock,
-        criticStock,
-        tax,
-        origin,
-        relatedFirm,
-        desi,
-        dimensions,
-        tags,
-        content,
-        teminTermin,
-        active,
-        onPremise,
-        vulnerable,
-        eCommerced,
-        createdAt,
-        updatedAt,
-        url,
-        formalPrice,
-        prices,
+        sector,
+        city,
+        region,
+        address,
+        type,
         category,
-        discount,
-        onSale,
-        bundle,
-        source
+        segment,
+        priority,
+        phone,
+        email,
+        linkedin,
+        xUrl,
+        instagram,
+        webURL,
+        strengths,
+        weaknesses,
+        redLines,
+        opinions,
+        personel,
+        authorized
       ) VALUES (
-        ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-        ?, ?, ?, ?, ?, ?, ?, ?, ?,
+        ?, ?, ?, ?, ?, ?, ?, ?,
         ?, ?, ?, ?, ?, ?, ?, ?,
         ?, ?, ?, ?, ?, ?, ?, ?
       )`;
 
-      // Convert arrays to strings, handle booleans as well
-      const imagesArray = images ? JSON.stringify(images.split(',')) : null;
-      //const tagsArray = tags ? JSON.stringify(tags.split(',')) : null;
-      //const bundleArray = bundle ? JSON.stringify(bundle.split(',')) : null;
-
+      const sectorArray = sector ? JSON.stringify(sector.split(',')) : null;
 
       const values = [
         id,
-        stockCode, 
-        barcode, 
-        productName, 
-        brand,
-        imagesArray || '[]',
-        description,
-        purPrice,
-        purCurrency,
-        price,
-        saleCurrency,
-        stock,
-        criticStock,
-        tax,
-        origin,
-        relatedFirm,
-        desi,
-        dimensions,
-        "[]",// tags
-        '', // content
-        '', // teminTermin
-        true, // active
-        false, // onPremise
-        false, // vulnerable
-        true, // eCommerced
-        new Date(), // createdAt
-        new Date(), // updatedAt
-        '', // url
-        0, // formalPrice
-        '[]', // prices
-        '', // category
-        0, // discount
-        false, // onSale
-        '[]', //bundle
-        '', // source
+        firmName,
+        firmId,
+        null,
+        sectorArray,
+        city,
+        region,
+        address,
+        null,
+        null,
+        null,
+        null,
+        phone,
+        email,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
       ];
 
       return new Promise((resolve, reject) => {
@@ -293,14 +271,16 @@ router.post('/upload', upload.single('file'), (req, res) => {
 
     // Execute all insertions
     Promise.all(promises)
-      .then(() => res.json({ message: 'Products uploaded successfully' }))
+      .then(() => res.json({ message: 'Firms uploaded successfully, avoiding duplicates.' }))
       .catch((error) => {
-        console.log(error)
-        res.status(500).send(error.message)});
+        console.log(error);
+        res.status(500).send(error.message);
+      });
   } catch (error) {
     return res.status(500).send('Error processing the file: ' + error.message);
   }
 });
+
 
 
 // READ all products
