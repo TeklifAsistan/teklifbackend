@@ -665,7 +665,7 @@ router.post('/upload', upload.single('file'), async (req, res) => {
 router.get('/', (req, res) => {
   const { firmId } = req.query; // Extract 'owner' from the query string
 
-  const sql = `SELECT * FROM products_${firmId}`;
+  const sql = `SELECT * FROM products_${firmId} ORDER BY productName ASC`;
   db.query(sql, (err, results) => {
     if (err) {
       return res.status(500).send(err);
@@ -803,6 +803,96 @@ router.put('/:id', (req, res) => {
     res.json({ message: 'Product updated successfully' });
   });
 });
+
+
+
+
+
+router.put('/multiple/:id', async (req, res) => {
+  const { id } = req.params;
+  const { firmId, multiple } = req.query;
+  const updatedFields = req.body;
+
+  if (!firmId) {
+    return res.status(400).send('firmId is required');
+  }
+
+  if (!Object.keys(updatedFields).length) {
+    return res.status(400).send('No fields to update');
+  }
+
+  // Fetch current product data if `multiple` flag is true
+  let currentData;
+  if (multiple === 'true') {
+    const [rows] = await db.promise().query(`SELECT * FROM products_${firmId} WHERE id = ?`, [id]);
+    if (rows.length === 0) {
+      return res.status(404).send('Product not found');
+    }
+    currentData = rows[0];
+  }
+
+  let sql = `UPDATE products_${firmId} SET `;
+  const sqlValues = [];
+  let fieldsToUpdate = false;
+
+  // Iterate through the updated fields and build the query dynamically
+  for (const field in updatedFields) {
+    let value = updatedFields[field];
+
+    if (multiple === 'true') {
+      // Handle fields with multiple values by merging arrays if `multiple` is true
+      if (Array.isArray(value)) {
+        const existingValues = JSON.parse(currentData[field] || '[]');
+        value = JSON.stringify([...new Set([...existingValues, ...value])]); // Avoid duplicates
+      } else if (field === 'price') {
+        // Append to `prices` if updating the `price` field
+        const existingPrices = JSON.parse(currentData.prices || '[]');
+        const newPrices = JSON.stringify([...existingPrices, value]);
+        sql += `prices = ?, `;
+        sqlValues.push(newPrices);
+        fieldsToUpdate = true;
+        continue;
+      }
+    } else {
+      // If not in multiple mode, use the value directly without array processing
+      value = typeof value === 'string' ? value : JSON.stringify(value);
+    }
+
+    // Add field to the query
+    sql += `${field} = ?, `;
+    sqlValues.push(value);
+    fieldsToUpdate = true;
+  }
+
+  // Check if we have fields to update, else return an error
+  if (!fieldsToUpdate) {
+    return res.status(400).send('No valid fields to update');
+  }
+
+  // Remove trailing comma and space from the SET clause
+  sql = sql.slice(0, -2);
+
+  // Add WHERE clause
+  sql += ' WHERE id = ?';
+  sqlValues.push(id);
+
+
+  // Execute the query
+  db.query(sql, sqlValues, (err, results) => {
+    if (err) {
+      console.log(err);
+      return res.status(500).send(err);
+    }
+    if (results.affectedRows === 0) {
+      return res.status(404).send('Product not found');
+    }
+    res.json({ message: 'Product updated successfully' });
+  });
+});
+
+
+
+
 
 
 // DELETE a product by ID
