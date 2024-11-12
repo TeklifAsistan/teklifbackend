@@ -174,7 +174,9 @@ router.post('/upload', upload.single('file'), async (req, res) => {
     });
 
     // Get all existing firm names from the database
-    const [existingFirms] = await db.promise().query('SELECT firmName FROM firms');
+    const [existingFirms] = await db.promise().query(
+      'SELECT firmName FROM firms WHERE dataOwner = ?', [firmId]
+    );    
     const existingFirmNames = new Set(existingFirms.map((firm) => firm.firmName.toLowerCase()));
 
     // Filter out duplicates from the transformed data based on firmName
