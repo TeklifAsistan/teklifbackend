@@ -412,7 +412,7 @@ router.post('/upload', upload.single('file'), async (req, res) => {
         barcode,
         productName,
         brand,
-        images,
+        //images,
         description,
         price,
         stock,
@@ -422,9 +422,9 @@ router.post('/upload', upload.single('file'), async (req, res) => {
         saleCurrency,
         purCurrency,
         origin,
-        relatedFirm,
+        //relatedFirm,
         warranty,
-        mbf,
+        //mbf,
         unit
       } = product;
 
@@ -438,7 +438,7 @@ router.post('/upload', upload.single('file'), async (req, res) => {
         barcode,
         productName,
         brand,
-        images ? JSON.stringify(images.split(',')) : null,
+        null,
         description,
         purPrice,
         purCurrency,
@@ -448,10 +448,10 @@ router.post('/upload', upload.single('file'), async (req, res) => {
         criticStock,
         tax,
         origin,
-        relatedFirm,
+        null,
         unit,
         warranty,
-        mbf,
+        false,
         new Date(),
         new Date(),
         true
