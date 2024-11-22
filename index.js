@@ -39,6 +39,20 @@ app.use('/tags', tagRoutes); // If you have a dedicated logs route
 app.use('/notes', noteRoutes); // If you have a dedicated logs route
 
 
+const keepDbAlive = () => {
+  db.query('SELECT 1', (err) => {
+    if (err) {
+      console.error('Error executing keep-alive query:', err);
+    } else {
+      console.log('Keep-alive query executed successfully');
+    }
+  });
+};
+
+// Start Keep-Alive Loop (10 minutes = 600,000 ms)
+setInterval(keepDbAlive, 60000); // 10 minutes
+
+
 
 // Start server
 app.listen(process.env.PORT || PORT, () => {
