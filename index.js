@@ -38,7 +38,9 @@ app.use('/offers', offerRoutes); // If you have a dedicated logs route
 app.use('/tags', tagRoutes); // If you have a dedicated logs route
 app.use('/notes', noteRoutes); // If you have a dedicated logs route
 
+
+
 // Start server
-app.listen(PORT, () => {
+app.listen(process.env.PORT || PORT, () => {
   console.log(`Server is running on port ${PORT}`);
 });
