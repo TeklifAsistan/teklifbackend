@@ -50,7 +50,7 @@ const keepDbAlive = () => {
 };
 
 // Start Keep-Alive Loop (10 minutes = 600,000 ms)
-setInterval(keepDbAlive, 60000); // 10 minutes
+setInterval(keepDbAlive, 600000); // 10 minutes
 
 
 
