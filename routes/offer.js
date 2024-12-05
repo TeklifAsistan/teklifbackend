@@ -189,7 +189,7 @@ router.get('/', (req, res) => {
     return res.status(400).send('firmId is required');
   }
 
-  const sql = `SELECT * FROM offers WHERE dataOwner = ? AND id NOT LIKE '%V%'`;
+  const sql = `SELECT * FROM offers WHERE dataOwner = ? AND id NOT LIKE '%V%'     ORDER BY createdAt DESC`;
   
   db.query(sql, [firmId], (err, results) => {
     if (err) {

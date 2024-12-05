@@ -716,6 +716,30 @@ router.get('/byBrand', (req, res) => {
     res.json(results);
   });
 });
+router.get('/byCategory', (req, res) => {
+  const { firmId, category } = req.query;
+
+  // Ensure firmId is provided
+  if (!firmId) {
+    return res.status(400).send("firmId is required");
+  }
+
+  // Base SQL query
+  let sql = `SELECT * FROM products_${firmId}`;
+
+  // Add category filter if provided
+  if (category) {
+    sql += ` WHERE category = ${db.escape(category)}`; // Use db.escape to prevent SQL injection
+  }
+
+  // Execute the query
+  db.query(sql, (err, results) => {
+    if (err) {
+      return res.status(500).send(err);
+    }
+    res.json(results);
+  });
+});
 
 router.get('/byGroup', (req, res) => {
   const { firmId, bundle } = req.query;
