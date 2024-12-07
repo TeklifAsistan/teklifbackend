@@ -240,6 +240,22 @@ router.get('/:id', (req, res) => {
   });
 });
 
+router.get('/statue/:id', (req, res) => {
+  const { id } = req.params;
+  
+  const tableName = `offers`;
+  
+  const sql = `SELECT statue FROM ${tableName} WHERE id = ?`;
+  db.query(sql, [id], (err, results) => {
+    if (err) {
+      return res.status(500).send(err);
+    }
+    if (results.length === 0) {
+      return res.status(404).send('Statue not found');
+    }
+    res.json(results[0]);
+  });
+});
 
 // UPDATE a offer by ID
 router.put('/:id', (req, res) => {
