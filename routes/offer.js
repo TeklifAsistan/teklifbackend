@@ -181,6 +181,26 @@ router.post('/', (req, res) => {
 
 
 // READ all offers
+// router.get('/', (req, res) => {
+//   const { firmId } = req.query; // Extract 'firmId' from the query string
+
+//   if (!firmId) {
+//     console.error("Error: firmId is required");
+//     return res.status(400).send('firmId is required');
+//   }
+
+//   const sql = `SELECT * FROM offers WHERE dataOwner = ? AND id NOT LIKE '%V%' ORDER BY publishedAt DESC`;
+  
+//   db.query(sql, [firmId], (err, results) => {
+//     if (err) {
+//       console.error("Database error:", err);
+//       return res.status(500).send(err);
+//     }
+//     res.json(results);
+//   });
+// });
+// Assuming you're using Express.js and have already set up your router and database connection
+
 router.get('/', (req, res) => {
   const { firmId } = req.query; // Extract 'firmId' from the query string
 
@@ -189,8 +209,24 @@ router.get('/', (req, res) => {
     return res.status(400).send('firmId is required');
   }
 
-  const sql = `SELECT * FROM offers WHERE dataOwner = ? AND id NOT LIKE '%V%' ORDER BY createdAt DESC`;
-  
+  // Updated SQL query with JOIN to include firmName
+  const sql = `
+    SELECT 
+      offers.*, 
+      firms.firmName 
+    FROM 
+      offers 
+    INNER JOIN 
+      firms 
+    ON 
+      offers.relatedFirm = firms.id 
+    WHERE 
+      offers.dataOwner = ? 
+      AND offers.id NOT LIKE '%V%' 
+    ORDER BY 
+      offers.publishedAt DESC
+  `;
+
   db.query(sql, [firmId], (err, results) => {
     if (err) {
       console.error("Database error:", err);
